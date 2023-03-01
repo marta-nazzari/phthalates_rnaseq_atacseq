@@ -1,0 +1,1 @@
+This repository contains a markdown file with the scripts used for the RNA-Seq and ATAC-Seq data analysis performed in the manuscript **'Investigation of the epigenetic effects of phthalates on _in vitro_ thyroid models with RNA-Seq and ATAC-Seq'** (manuscript in preparation).
