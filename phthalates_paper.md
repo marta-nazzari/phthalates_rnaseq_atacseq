@@ -1,11 +1,3 @@
----
-title: "RNA-Seq and ATAC-Seq data analysis of the manuscript 'Investigation of the epigenetic effects of phthalates on _in vitro_ thyroid models with RNA-Seq and ATAC-Seq'"
-author: "author: Marta Nazzari"
-output: html_notebook
-html_document: D:/SCREENED/papers/phthalates_ATACSeq/phthalates_paper.html
----
-
-
 This notebook contains the workflow used for the processing and analysis of RNA-Seq and ATAC-Seq data underlying the manuscript "Investigation of the epigenetic effects of phthalates on _in vitro_ thyroid models with RNA-Seq and ATAC-Seq".
 
 
