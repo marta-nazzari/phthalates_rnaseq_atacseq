@@ -1,4 +1,4 @@
-This notebook contains the workflow used for the processing and analysis of RNA-Seq and ATAC-Seq data underlying the manuscript "Investigation of the epigenetic effects of phthalates on _in vitro_ thyroid models with RNA-Seq and ATAC-Seq".
+This notebook contains the workflow used for the processing and analysis of RNA-Seq and ATAC-Seq data underlying the manuscript "Investigation of the effects of phthalates on _in vitro_ thyroid models with RNA-Seq and ATAC-Seq".
 
 
 # RNA-Seq data analysis
@@ -27,7 +27,7 @@ library(RUVSeq)
 Control = 'DMSO'
 FDR = 0.01
 k_ruv = 2
-mart = read.table('D:/lab/mouse_ensgid_to_gene_name.txt', header = T, fill = T)
+mart = read.table('D:/files/mouse_ensgid_to_gene_name.txt', header = T, fill = T)
 
 
 Drugs = c('DEHP', 'DIDP', 'DINP', 'DnOP')
