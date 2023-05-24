@@ -806,7 +806,7 @@ gl_entrez = gl_entrez[order(gl_entrez, decreasing = T)]
 
 Reactome = ReactomePA::gsePathway(gl_entrez, 
                                   organism = 'mouse',
-                                  pvalueCutoff = 0.2,
+                                  pvalueCutoff = 0.25,
                                   pAdjustMethod = "BH", 
                                   verbose = FALSE,
                                   eps = 1e-50,  # or try using eps = 0
