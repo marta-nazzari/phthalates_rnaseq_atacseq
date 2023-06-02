@@ -806,7 +806,7 @@ gl_entrez = gl_entrez[order(gl_entrez, decreasing = T)]
 
 Reactome = ReactomePA::gsePathway(gl_entrez, 
                                   organism = 'mouse',
-                                  pvalueCutoff = 0.25,
+                                  pvalueCutoff = 1, # to retrieve all terms
                                   pAdjustMethod = "BH", 
                                   verbose = FALSE,
                                   eps = 1e-50,  # or try using eps = 0
@@ -817,17 +817,17 @@ View(Reactome@result)
 write.table(Reactome@result, file = paste0('project_folder/RNA-Seq/DE_analysis/reactome_GSEA_', drug, '.txt'), row.names = F, quote = F, sep = '\t')
 
 
-# Example of leading edge plot ('Metabolism of lipids') 
-pw = 'Metabolism of lipids'
+# Example of leading edge plot ('Fatty acid metabolism') 
+pw = 'Fatty acid metabolism'
 
-p = gseaplot2(Reactome, geneSetID = Reactome@result[Reactome@result$Description == 'Metabolism of lipids',]$ID, 
+p = gseaplot2(Reactome, geneSetID = Reactome@result[Reactome@result$Description == 'Fatty acid metabolism',]$ID, 
             title = paste0(drug, ' vs DMSO\n',
-                           'Metabolism of lipids',
-                           '\n(NES = ', round(Reactome@result[Reactome@result$Description == 'Metabolism of lipids',]$NES, digits = 3),
-                           ', q-value = ', round(Reactome@result[Reactome@result$Description == 'Metabolism of lipids',]$qvalue, digits = 3), 
+                           'Fatty acid metabolism',
+                           '\n(NES = ', round(Reactome@result[Reactome@result$Description == 'Fatty acid metabolism',]$NES, digits = 3),
+                           ', q-value = ', round(Reactome@result[Reactome@result$Description == 'Fatty acid metabolism',]$qvalue, digits = 3), 
                            ')')) 
 
-ggsave(plot = p, file = paste0('project_folder/RNA-Seq/DE_analysis/plots/Metabolism_of_lipids_', drug, '.png'), 
+ggsave(plot = p, file = paste0('project_folder/RNA-Seq/DE_analysis/plots/Fatty_acid_metabolism_', drug, '.png'), 
          dpi = 600, height = 3000, width = 4000, units = 'px')
 ```
 
