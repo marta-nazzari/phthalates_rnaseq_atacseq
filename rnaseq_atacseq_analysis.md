@@ -5,7 +5,6 @@ This notebook contains the workflow used for the processing and analysis of RNA-
 ## 1 - Raw sequencing data processing
 Used the script available at https://github.com/marta-nazzari/CODA/blob/main/CODA_preprocess.sh.
 
-
 ## 2 - Differential expression analysis
 ``` r
 # load required packages
@@ -767,8 +766,404 @@ for (i in seq(1, length(Drugs))) {
 }
 ```
 
+## 3 - MaSigPro analysis
+Note: I have modified some maSigPro plotting functions to place the doses with the right lables (instead of time) on the x-axis annotation, and to plot clusters even with only one gene. Before running this code, redefine the functions at line 834.
 
-## 3 - Gene Set Enrichment Analysis on Reactome
+``` r
+ # MaSigPro
+library(maSigPro)
+library(MASS)
+library(tidyverse)
+library(magrittr)
+
+cluster_all_edcs = tibble(Gene = character())
+
+drug = c('DEHP', 'DIDP', 'DINP', 'DnOP')
+
+# iterated over all compounds 
+for (i in 1:length(drug)) {
+  
+  print(drug[i])
+  
+  norm_count = read.table(paste0('project_folder/RNA-Seq/DE_analysis/DE_filtered/', drug[i], '_vs_DMSO_FDR_0.01_Norm_count_all.txt'), header = T, fill = T)
+  
+  norm_count %<>% mutate(gene_id = paste0(ensembl_gene_id, ' - ', external_gene_name)) %>% # make ids with name 
+    mutate_at('gene_id', ~ str_replace(., pattern = ' - $', replacement = '')) %>% # remove empty names
+    dplyr::select(-gene_biotype, -ensembl_gene_id, -external_gene_name) %>% 
+    column_to_rownames(var = 'gene_id') 
+
+  samplekey = read.table(project_folder/RNA-Seq/masigpro_analysis/masigpro_metadata.txt', header = T) %>% 
+    .[rownames(.) %in% colnames(norm_count), ] %>% 
+    dplyr::select(c('Dose', 'Replicates', contains(drug[i])))
+  
+  num_degrees = 3
+  d = make.design.matrix(samplekey, degree = num_degrees) # degree = 2 is default
+
+  NBp = p.vector(norm_count, d, counts = TRUE) # 1st regression step
+  NBt = T.fit(NBp) # 2nd regression step
+  get = get.siggenes(NBt, vars = "groups", rsq = 0.7) # rsq = 0.7 is default
+  get$summary
+  get$sig.genes
+
+  # get the genes in the clusters
+  num_clusters = 9 # 9 is the default
+
+  # see the genes and sort by cluster number
+  drug_name = drug[i] 
+  
+  cluster_all_edcs = see.genes(get$sig.genes[[1]], k = num_clusters)$cut %>% 
+    as.data.frame() %>%
+    rename({{drug_name}} := '.') %>% # note: putting {{drug[i]}} throws an error
+    arrange({{drug_name}}) %>% 
+    rownames_to_column(var = 'Gene') %>% 
+    full_join(cluster_all_edcs, ., by = 'Gene')
+
+  # save plot with clusters
+  svg(filename = paste0('project_folder/RNA-Seq/masigpro_analysis/masigpro_k', num_clusters, 
+                        '_degree', num_degrees, '/masigpro_', drug[i], '.svg'), width = 6, height = 6)
+  see.genes(get$sig.genes[[1]], show.fit = T, dis = d$dis, color.mode = 'rainbow', col = i, # 1 = black, 2 = red, 3 = green, 4 = blue, 5 = turquoise
+            cluster.method = "hclust", cluster.data = 1, k = num_clusters)
+  dev.off()
+
+  # save table with all clusters for a given EDC class
+  if (i == length(drug)) { write.table(cluster_all_edcs, quote = F, sep = '\t', row.names = F,
+                            file = paste0('project_folder/RNA-Seq/masigpro_analysis/masigpro_degree', 
+                                          num_degrees, '_all_phthalates.txt')) }
+}
+
+# NEED TO MODIFY MaSigPro FUNCTIONS see.genes(), PlotProfiles() AND PlotGroups() TO PERSONALIZE PLOT WITH DOSES (INSTEAD OF TIME) AND TO PLOT CLUSTERS WITH ONLY 1 GENE
+PlotProfiles = function (data, cond, cex.axis = 0.5, ylim = NULL, repvect, main = NULL, 
+          sub = NULL, color.mode = "rainbow", item = NULL) {
+  pos.vline <- repvect[1:length(repvect)] - c(0, repvect[1:(length(repvect) - 
+                                                              1)])
+  for (i in 1:length(pos.vline)) {
+    if (pos.vline[i] != 0) 
+      pos.vline[i] <- i
+    else pos.vline[i] <- pos.vline[i - 1]
+  }
+  if (is.null(ylim)) {
+    ylim = c(min(as.matrix(data), na.rm = TRUE) * 1.1, max(as.matrix(data), 
+                                                           na.rm = TRUE) * 1.1)
+  }
+  if (!is.vector(data)) {
+    n = dim(data)[2]
+    m = dim(data)[1]
+    if (m == 1)
+      nom <- rownames(data)
+    else nom <- paste("Cluster", main, "(", m, item, ")",
+                      sep = " ")
+    plot(x = c(1:n), y = as.numeric(data[1, ]), type = "b", col = 1, # modified: added as.numeric() and drop = F
+         ylim = ylim, ylab = "expression value", xlab = " ",
+         main = nom, xaxt = "n")
+    axis(1, at = 1:n, labels = substr(cond, 1, 26), cex.axis = cex.axis,
+         las = 2)
+    if (color.mode == "rainbow") {
+      abline(v = pos.vline, col = "light gray")
+      for (i in 1:dim(data)[1]) {
+        lines(x = c(1:n), y = data[i, , drop = F], col = i)
+      }
+    }
+    else if (color.mode == "gray") {
+      for (i in 1:dim(data)[1]) {
+        lines(x = c(1:n), y = data[i, , drop = F], col = "light gray")
+      }
+      yy <- apply(as.matrix(data), 2, median, na.rm = TRUE)
+      lines(x = c(1:n), y = yy, col = "black")
+    }
+    else stop("Invalid mode, must be one of rainbow, gray")
+  }
+  else {
+    n = length(data)
+    plot(x = c(1:n), y = data, type = "l", col = 1, ylim = ylim,
+         ylab = "expression value", sub, xaxt = "n", xlab = " ")
+    axis(1, at = 1:n, labels = cond, cex.axis = cex.axis,
+         las = 2)
+    abline(v = pos.vline, col = "light gray")
+  }
+}
+
+PlotGroups = function (data, edesign = NULL, time = edesign[, 1], groups = edesign[, 
+                                                                                   c(3:ncol(edesign))], repvect = edesign[, 2], show.lines = TRUE, 
+                       show.fit = FALSE, dis = NULL, step.method = "backward", min.obs = 2, 
+                       alfa = 0.05, nvar.correction = FALSE, summary.mode = "median", 
+                       groups.vector = NULL, main = NULL, sub = NULL, xlab = "Dose", 
+                       ylab = "Expression value", item = NULL, ylim = NULL, pch = 21, 
+                       col = NULL, legend = TRUE, cex.legend = 1, lty.legend = NULL, 
+                       ...) 
+{
+  if (!is.vector(data)) {
+    if (summary.mode == "representative") {
+      distances <- apply(as.matrix(dist(data, diag = TRUE, 
+                                        upper = TRUE)), 1, sum)
+      representative <- names(distances)[distances == min(distances)]
+      yy <- as.numeric(data[rownames(data) == representative, 
+      ])
+      sub <- paste("Representative:", representative)
+    }
+    else if (summary.mode == "median") {
+      yy <- apply(as.matrix(data), 2, median, na.rm = TRUE)
+      if (is.null(sub)) {
+        sub <- paste("Median profile of", nrow(data), 
+                     item, sep = " ")
+      }
+    }
+    else stop("not valid summary.mode")
+    if (dim(data)[1] == 1) {
+      main <- rownames(data)
+      sub = NULL
+    }
+  }
+  else if (length(data) != 0) {
+    yy <- as.numeric(data)
+    sub <- rownames(data)
+  }
+  else stop("empty data")
+  if (is.null(ncol(groups))) {
+    ncol = 1
+    legend = FALSE
+    codeg = "group"
+  }
+  else {
+    ncol = ncol(groups)
+    codeg <- as.character(colnames(groups))
+  }
+  reps <- i.rank(repvect)
+  y <- vector(mode = "numeric", length = length(unique(reps)))
+  x <- vector(mode = "numeric", length = length(unique(reps)))
+  g <- matrix(nrow = length(unique(reps)), ncol = ncol)
+  for (k in 1:length(y)) {
+    y[k] <- mean(yy[reps == k], na.rm = TRUE)
+    x[k] <- mean(time[reps == k])
+    for (j in 1:ncol) {
+      g[k, j] <- mean(groups[reps == k, j])
+    }
+  }
+  if (is.null(ylim)) 
+    ylim = c(min(as.numeric(yy), na.rm = TRUE), max(as.numeric(yy), 
+                                                    na.rm = TRUE))
+  abcissa <- x
+  xlim = c(min(abcissa, na.rm = TRUE), max(abcissa, na.rm = TRUE) * 
+             1.3)
+  if (is.null(col)) {
+    color1 <- as.numeric(sort(factor(colnames(groups)))) + 
+      1
+    color2 <- groups
+    for (j in 1:ncol) {
+      color2[, j] <- color2[, j] * j
+    }
+    color2 <- as.vector(apply(color2, 1, sum) + 1)
+  }
+  else {
+    color1 <- col
+    color2 <- groups
+    for (j in 1:ncol) {
+      color2[, j] <- color2[, j] * col[j]
+    }
+    color2 <- as.vector(apply(color2, 1, sum))
+  }
+  plot(x = time, y = yy, pch = pch, xlab = xlab, ylab = ylab, 
+       main = main, xaxt = "n", sub = sub, ylim = ylim, xlim = xlim, 
+       col = color2, ...)
+  arg = list(...)
+  axis(1, at = 0:5, labels = c('0', '1 nM', '10 nM', '100 nM', '1 uM', '10 uM'), lwd = 1, # EDCs
+  #axis(1, at = 0:3, labels = c('0', '10 uM', '100 uM', '1 mM'), lwd = 1, # reference compounds
+       cex.axis = arg$cex.axis, las = 3)
+  if (show.fit) {
+    rm <- matrix(yy, nrow = 1, ncol = length(yy))
+    rownames(rm) <- c("ratio medio")
+    colnames(rm) <- rownames(dis)
+    fit.y <- T.fit(rm, design = dis, step.method = step.method, 
+                   min.obs = min.obs, alfa = alfa, nvar.correction = nvar.correction)
+    betas <- fit.y$coefficients
+  }
+  for (i in 1:ncol(groups)) {
+    group <- g[, i]
+    if ((show.fit) && !is.null(betas)) {
+      li <- c(2:6)
+      a <- reg.coeffs(coefficients = betas, groups.vector = groups.vector, 
+                      group = colnames(groups)[i])
+      a <- c(a, rep(0, (7 - length(a))))
+      curve(a[1] + a[2] * x + a[3] * (x^2) + a[4] * (x^3) + 
+              a[5] * (x^4) + a[6] * (x^5) + a[7] * (x^5), from = min(time), 
+            to = max(time), col = color1[i], add = TRUE, 
+            lty = li[i], ...)
+    }
+    if (show.lines) {
+      lx <- abcissa[group != 0]
+      ly <- y[group != 0]
+      ord <- order(lx)
+      lxo <- lx[ord]
+      lyo <- ly[ord]
+      lines(lxo, lyo, col = color1[i], ...)
+    }
+  }
+  op <- par(bg = "white")
+  if (legend) 
+    legend(max(abcissa, na.rm = TRUE) * 1.02, ylim[1], legend = codeg, 
+           text.col = color1, col = color1, lty = lty.legend, 
+           yjust = 0, bty = "n", cex = cex.legend)
+  par(op)
+}
+
+
+see.genes = function (data, edesign = data$edesign, time.col = 1, repl.col = 2, 
+                      group.cols = c(3:ncol(edesign)), names.groups = colnames(edesign)[3:ncol(edesign)], 
+                      cluster.data = 1, groups.vector = data$groups.vector, k = 9, 
+                      k.mclust = FALSE, cluster.method = "hclust", distance = "cor", 
+                      agglo.method = "ward.D", show.lines = TRUE, show.fit = FALSE, 
+                      dis = NULL, step.method = "backward", min.obs = 3, alfa = 0.05, 
+                      nvar.correction = FALSE, iter.max = 500, summary.mode = "median", 
+                      color.mode = "rainbow", ylim = NULL, item = "genes", legend = TRUE, 
+                      cex.legend = 1, lty.legend = NULL, ...) 
+{
+  time = edesign[, time.col]
+  repvect = edesign[, repl.col]
+  groups = edesign[, group.cols]
+  narrays <- length(time)
+  if (!is.null(dim(data))) {
+    dat <- as.data.frame(data)
+    clusterdata <- data
+  }
+  else {
+    clusterdata <- data[[cluster.data]]
+    dat <- as.data.frame(data$sig.profiles)
+  }
+  if (nrow(dat) > 1) {
+    dat <- as.data.frame(dat[, (ncol(dat) - length(time) + 
+                                  1):ncol(dat)])
+    count.noNa <- function(x) (length(x) - length(x[is.na(x)]))
+    dat <- dat[which(apply(as.matrix(dat), 1, count.noNa) >= 
+                       length(unique(repvect))), ]
+    clusterdata <- dat
+    if (any(is.na(clusterdata))) {
+      if (cluster.method == "kmeans" || cluster.method == 
+          "Mclust") {
+        if (all(cluster.data != 1, cluster.data != "sig.profiles")) {
+          clusterdata[is.na(clusterdata)] <- 0
+        }
+        else {
+          mean.replic <- function(x) {
+            tapply(as.numeric(x), repvect, mean, na.rm = TRUE)
+          }
+          MR <- t(apply(clusterdata, 1, mean.replic))
+          if (any(is.na(MR))) {
+            row.mean <- t(apply(MR, 1, mean, na.rm = TRUE))
+            MRR <- matrix(row.mean, nrow(MR), ncol(MR))
+            MR[is.na(MR)] <- MRR[is.na(MR)]
+          }
+          data.noNA <- matrix(NA, nrow(clusterdata), 
+                              ncol(clusterdata))
+          u.repvect <- unique(repvect)
+          for (i in 1:nrow(clusterdata)) {
+            for (j in 1:length(u.repvect)) {
+              data.noNA[i, repvect == u.repvect[j]] = MR[i, 
+                                                         u.repvect[j]]
+            }
+          }
+          clusterdata <- data.noNA
+        }
+      }
+    }
+    if (!is.null(clusterdata)) {
+      k <- min(k, nrow(dat), na.rm = TRUE)
+      if (cluster.method == "hclust") {
+        if (distance == "cor") {
+          dcorrel <- matrix(rep(1, nrow(clusterdata)^2), 
+                            nrow(clusterdata), nrow(clusterdata)) - cor(t(clusterdata), 
+                                                                        use = "pairwise.complete.obs")
+          clust <- hclust(as.dist(dcorrel), method = agglo.method)
+          c.algo.used = paste(cluster.method, "cor", 
+                              agglo.method, sep = "_")
+        }
+        else {
+          clust <- hclust(dist(clusterdata, method = distance), 
+                          method = agglo.method)
+          c.algo.used = paste(cluster.method, distance, 
+                              agglo.method, sep = "_")
+        }
+        cut <- cutree(clust, k = k)
+      }
+      else if (cluster.method == "kmeans") {
+        cut <- kmeans(clusterdata, k, iter.max)$cluster
+        c.algo.used = paste("kmeans", k, iter.max, sep = "_")
+      }
+      else if (cluster.method == "Mclust") {
+        if (k.mclust) {
+          my.mclust <- Mclust(clusterdata)
+          k = my.mclust$G
+        }
+        else {
+          my.mclust <- Mclust(clusterdata, k)
+        }
+        cut <- my.mclust$class
+        c.algo.used = paste("Mclust", k, sep = "_")
+      }
+      else stop("Invalid cluster algorithm")
+      groups <- as.matrix(groups)
+      colnames(groups) <- names.groups
+      if (k <= 4) 
+        par(mfrow = c(3, 3))
+      else if (k <= 6) 
+        par(mfrow = c(3, 3))
+      else if (k > 6) 
+        par(mfrow = c(3, 3))
+      for (i in 1:(k)) {
+        PlotProfiles(data = dat[cut == i, , drop = F], repvect = repvect, 
+                     main = i, ylim = ylim, color.mode = color.mode, 
+                     cond = rownames(edesign), item = item)
+      }
+      if (k <= 4) {
+        par(mfrow = c(3, 3))
+      }
+      else if (k <= 6) {
+        par(mfrow = c(3, 3))
+      }
+      else if (k > 6) {
+        par(mfrow = c(3, 3))
+      }
+      for (j in 1:(k)) {
+        PlotGroups(data = dat[cut == j, ], show.fit = show.fit, 
+                   dis = dis, step.method = step.method, min.obs = min.obs, 
+                   alfa = alfa, nvar.correction = nvar.correction, 
+                   show.lines = show.lines, time = time, groups = groups, 
+                   repvect = repvect, summary.mode = summary.mode, 
+                   xlab = "", main = paste("Cluster", j, sep = " "), 
+                   ylim = ylim, legend = legend, groups.vector = groups.vector, 
+                   item = item, cex.legend = cex.legend, lty.legend = lty.legend, 
+                   ...)
+      }
+    }
+    else {
+      print("warning: impossible to compute hierarchical clustering")
+      c.algo.used <- NULL
+      cut <- 1
+    }
+  }
+  else if (nrow(dat) == 1) {
+    PlotProfiles(data = dat, repvect = repvect, ylim = ylim, 
+                 color.mode = color.mode, cond = rownames(edesign))
+    PlotGroups(data = dat, show.fit = show.fit, dis = dis, 
+               step.method = step.method, min.obs = min.obs, alfa = alfa, 
+               nvar.correction = nvar.correction, show.lines = show.lines, 
+               time = time, groups = groups, repvect = repvect, 
+               summary.mode = summary.mode, xlab = "time", ylim = ylim, 
+               legend = legend, groups.vector = groups.vector, cex.legend = cex.legend, 
+               lty.legend = lty.legend, ...)
+    c.algo.used <- NULL
+    cut <- 1
+  }
+  else {
+    print("warning: NULL data. No visualization possible")
+    c.algo.used <- NULL
+    cut <- NULL
+  }
+  OUTPUT <- list(cut, c.algo.used, groups)
+  names(OUTPUT) <- c("cut", "cluster.algorithm.used", "groups")
+  OUTPUT
+}
+```
+
+## 4 - Gene Set Enrichment Analysis on Reactome
 How to interpret GSEA results: http://www.gsea-msigdb.org/gsea/doc/GSEAUserGuideFrame.html?_Interpreting_GSEA_Results 
 
 ``` r
