@@ -792,7 +792,7 @@ for (i in 1:length(drug)) {
     dplyr::select(-gene_biotype, -ensembl_gene_id, -external_gene_name) %>% 
     column_to_rownames(var = 'gene_id') 
 
-  samplekey = read.table(project_folder/RNA-Seq/masigpro_analysis/masigpro_metadata.txt', header = T) %>% 
+  samplekey = read.table('project_folder/RNA-Seq/masigpro_analysis/masigpro_metadata.txt', header = T) %>% 
     .[rownames(.) %in% colnames(norm_count), ] %>% 
     dplyr::select(c('Dose', 'Replicates', contains(drug[i])))
   
