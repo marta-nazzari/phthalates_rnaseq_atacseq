@@ -767,7 +767,7 @@ for (i in seq(1, length(Drugs))) {
 ```
 
 ## 3 - MaSigPro analysis
-Note: I have modified some maSigPro plotting functions to place the doses with the right lables (instead of time) on the x-axis annotation, and to plot clusters even with only one gene. Before running this code, redefine the functions at line 834.
+Note: I have modified some maSigPro plotting functions to place the doses with the right lables (instead of time) on the x-axis annotation, and to plot clusters even with only one gene. Before running this code, redefine the maSigPro functions at the bottom of this chunk.
 
 ``` r
  # MaSigPro
